@@ -1,7 +1,0 @@
-# .gitignore (solo local)
-.idea/
-__pycache__/
-*.pyc
-.venv/
-*.pkl
-*.p
