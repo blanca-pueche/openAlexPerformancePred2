@@ -1,3 +1,5 @@
+from email.policy import default
+
 from numpy.matlib import empty
 
 from utils.pipeline import *
@@ -6,7 +8,8 @@ import pandas as pd
 import streamlit as st
 
 st.set_page_config(
-    page_title="OpenAlex Performance Predictor CNB"
+    page_title="OpenAlex Performance Predictor CNB",
+    page_icon='📈'
 )
 
 st.markdown("""
@@ -99,9 +102,9 @@ allInstitutions = [
 year=2020 # todo use this in the search!?
 
 
-email = st.text_input("User e-mail:", key="OpenAlex user email")
+email = st.text_input("User e-mail:", key="OpenAlex user email", value='blanca.pueche@cnb.csic.es')
 
-options = ['Institute', 'Author', 'All institutions']
+options = ['Institute', 'Author']
 searchBy = st.pills('Search by: ', options, selection_mode="single", default=None)
 
 
@@ -123,14 +126,10 @@ elif searchBy == options[1]:
     fnAll = "app/dfMultAids.p"
     if os.path.exists(fnAll):
         dfAll = pickle.load(open(fnAll, "rb"))
-else:
-    # All institutions
-    fnAll = "app/dfAll.p"
-    if os.path.exists(fnAll):
-        dfAll = pickle.load(open(fnAll, "rb"))
+        print(dfAll)
 
 # submit
-if inputIds or searchBy == options[2]:
+if inputIds:
     if not dfAll:
         with st.spinner("OpenAlex search..."):
             try:
@@ -155,29 +154,22 @@ if inputIds or searchBy == options[2]:
                     aids = [x.strip() for x in inputIds.split(",") if x.strip()]
                     aids = checkValid(aids, 'A', st)
                     inst_ids = get_inst_ids_from_authors(aids, email)
-                    df = build_author_df_and_unique_work_distributions(aids, Y=year, mailto=MAILTO, sleep_s=1)
-                    df = df[df["count1"] > 0].reset_index(drop=True)
-                    dfAll = {}
-                    for aid, inst_id in zip(aids, inst_ids):
-                        if inst_id not in dfAll:
-                            dfAll[inst_id] = df[df["aid"] == aid]
-                        else:
-                            dfAll[inst_id] = pd.concat([dfAll[inst_id], df[df["aid"] == aid]], ignore_index=True)
+                    for inst_id in inst_ids:
+                        try:
+                            aids_in_inst = authors_working_at_institution_in_year(inst_id, year, email)
+                        except Exception as e:
+                            st.error(f"Error retrieving authors for institution {inst_id}: {e}")
+                            st.stop()
+
+                        df_inst = build_author_df_and_unique_work_distributions(
+                            aids_in_inst, Y=year, mailto=MAILTO, sleep_s=1
+                        )
+                        df_inst = df_inst[df_inst["count1"] > 0].reset_index(drop=True)
+
+                        dfAll[inst_id] = df_inst
                     fnAll = "app/dfMultAids.p"
                     pickle.dump(dfAll, open(fnAll, "wb"))
-                else:
-                    # All institutions
-                    for inst in allInstitutions:
-                        try:
-                            aids = authors_working_at_institution_in_year(inst, year, email)
-                        except Exception as e:
-                            st.error(f"Error retrieving authors for institution {inst}: {e}")
-                            st.stop()
-                        df = build_author_df_and_unique_work_distributions(aids, Y=year, mailto=MAILTO, sleep_s=0.05)
-                        df = df[(df["count1"] > 0)].reset_index(drop=True)
-                        dfAll[allInstitutions] = df
-                    fnAll = "app/dfMultInst.p"
-                    pickle.dump(dfAll, open(fnAll, "wb"))
+
             except Exception as e:
                 st.error(f"Unexpected error during OpenAlex search: {e}")
                 st.stop()
@@ -198,8 +190,18 @@ if inputIds or searchBy == options[2]:
               for c in cols:
                   col = f"{c}{suffix}"
                   d[f"{col}Perc"] = d[col].rank(pct=True)
+                  print(d[f"{col}Perc"])
             d["avgPerc1"]=(d["citationAvg1Perc"]+d["count1Perc"]+d["maxCitation1Perc"])/3
+            print(d["avgPerc1"])
             d["avgPerc2"]=(d["citationAvg2Perc"]+d["count2Perc"]+d["maxCitation2Perc"])/3
+            print(d["avgPerc2"])
+
+            #filter if only specific authors
+            if searchBy == options[1]:
+                selected_aids = [x.strip() for x in inputIds.split(",") if x.strip()]
+                d = d[d["authorID"].isin(selected_aids)]
+
+            dfAll[inst_id] = d
 
             # collect only percentile columns
             perc_cols = [f"{c}{suffix}Perc" for c in cols for suffix in ["1", "2"]]
@@ -223,62 +225,30 @@ if inputIds or searchBy == options[2]:
         score_col = "avgPerc1"
         target_col = "avgPerc2"
 
-        options2 = ['Best params', 'Default', 'Choose']
-        searchBy2 = st.pills('Budget parameters: ', options2, selection_mode="single", default=None)
-
         alpha = None
         lambda_val = None
         gamma = None
-        if searchBy2:
-            if searchBy2 == options2[0]:
-                best_params, results = grid_search_hyperparams(
-                    df=df, B=B, score_col=score_col,
-                    target_col=target_col,
-                    alphas=np.linspace(0.0, 1.0, 21),
-                    lambdas=np.linspace(0.0, 1.0, 21),
-                    gammas=np.linspace(0.1, 3.0, 21),
-                    # Optional bounds
-                    b_min=0.0, b_max=np.inf
+
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            alpha = st.number_input("Alpha:", value=0.3, min_value=0.00, max_value=1.00)
+        with col2:
+            lambda_val = st.number_input("Lambda:", value=0.8, min_value=0.00, max_value=1.00)
+        with col3:
+            gamma = st.number_input("Gamma:", value=1.5)
+
+        if st.button("Submit", type='primary'):
+            alloc = allocate_budget(
+                    df=df,
+                    B=1,
+                    score_col='avgPerc1',
+                    alpha=alpha,
+                    lambda_uniform=lambda_val,
+                    gamma=gamma,
+                    id_col='authorID',
+                    add_columns=True
                 )
-                alpha = best_params['alpha']
-                lambda_val = best_params['lambda']
-                gamma = best_params['gamma']
-                st.write("### Best parameters")
-                col1, col2, col3 = st.columns(3)
-                col1.metric("Alpha", alpha)
-                col2.metric("Lambda", lambda_val)
-                col3.metric("Gamma", gamma)
-            elif searchBy2 == options2[1]:
-            # default params
-                alpha = 0.3
-                lambda_val = 0.8
-                gamma = 1.5
-                st.write("### Default parameters")
-                col1, col2, col3 = st.columns(3)
-                col1.metric("Alpha", alpha)
-                col2.metric("Lambda", lambda_val)
-                col3.metric("Gamma", gamma)
-            else:
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    alpha = st.number_input("Alpha:", value=0.3)
-                with col2:
-                    lambda_val = st.number_input("Lambda:", value=0.8)
-                with col3:
-                    gamma = st.number_input("Gamma:", value=1.5)
 
-            if st.button("Submit", type='primary'):
-                alloc = allocate_budget(
-                        df=df,
-                        B=1,
-                        score_col='avgPerc1',
-                        alpha=alpha,
-                        lambda_uniform=lambda_val,
-                        gamma=gamma,
-                        id_col='authorID',
-                        add_columns=True
-                    )
-
-                st.header('Budget allocation')
-                st.dataframe(alloc)
-                st.caption(f"**Shape:** {alloc.shape}")
+            st.header('Budget allocation')
+            st.dataframe(alloc)
+            st.caption(f"**Shape:** {alloc.shape}")
