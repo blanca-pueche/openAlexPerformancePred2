@@ -77,6 +77,7 @@ with col2:
     )
 
 # Get all institutions authors (test)
+#todo quitar cuando este terminado
 allInstitutions = [
     "i4210087039", # 1 Instituto Investig. Biomedicas
     "i4210130807", # 2 Instituto Astrofisico de Canarias
@@ -159,7 +160,7 @@ if inputIds:
                             aids_in_inst = authors_working_at_institution_in_year(inst_id, year, email)
                         except Exception as e:
                             st.error(f"Error retrieving authors for institution {inst_id}: {e}")
-                            st.stop()
+                            #st.stop()
 
                         df_inst = build_author_df_and_unique_work_distributions(
                             aids_in_inst, Y=year, mailto=MAILTO, sleep_s=1
