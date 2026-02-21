@@ -253,3 +253,27 @@ if inputIds:
             st.header('Budget allocation')
             st.dataframe(alloc)
             st.caption(f"**Shape:** {alloc.shape}")
+
+
+st.markdown("""
+    <style>
+    footer {
+        visibility: hidden;
+    }
+    .footer {
+        position: fixed;
+        left: 0;
+        bottom: 0;
+        width: 100%;
+        background-color: rgba(240,240,240,0.7);
+        text-align: center;
+        color: gray;
+        font-size: 0.9em;
+        padding: 8px 0;
+    }
+    </style>
+
+    <div class="footer">
+        © 2026 CNB – Performance predictor 📈
+    </div>
+""", unsafe_allow_html=True)
