@@ -137,12 +137,11 @@ def citation_distribution_for_work_set(work_ids, y0: int, y1: int, mailto: str,
         dist.append(citation_count_for_work_in_year_range(wid, y0, y1, mailto=mailto, sleep_s=sleep_s))
     return dist
 
-# todo try this: get inst_id by aid
 def get_inst_ids_from_authors(aids: str, email: str):
     inst_ids = []
     for aid in aids:
         url = f"https://api.openalex.org/authors/{aid}"
-        params = {"mailto": MAILTO}
+        params = {"mailto": email}
         r = requests.get(url, params=params)
         if r.status_code != 200:
             inst_ids.append(None)
