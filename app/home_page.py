@@ -76,16 +76,12 @@ with col2:
         unsafe_allow_html=True
     )
 
-# Get all institutions authors (test)
-
-
+# Input options and params
 email = st.text_input("User e-mail:", help="OpenAlex user email")
 
 year = st.number_input("Year:", help="Year to search in OpenAlex", value=2020)
 options = ['Institute', 'Author']
 searchBy = st.pills('Search by: ', options, selection_mode="single", default=None)
-
-
 
 
 if not email and searchBy:
@@ -97,12 +93,14 @@ dfAll = {}
 if searchBy == options[0]:
     # Selected institutions
     inputIds = st.text_input("Institute ids:", help='If more than one, separate with commas.')
+    #todo delete this when its finished
     fnAll = "app/dfMultInst.p"
     if os.path.exists(fnAll):
         dfAll = pickle.load(open(fnAll, "rb"))
 elif searchBy == options[1]:
     # Selected authors
     inputIds = st.text_input("Author ids:", help='If more than one, separate with commas.')
+    # todo delete this when its finished
     fnAll = "app/dfMultAids.p"
     if os.path.exists(fnAll):
         dfAll = pickle.load(open(fnAll, "rb"))
@@ -195,7 +193,18 @@ if inputIds:
         )
 
         st.header('Performance')
-        st.dataframe(df)
+        df["authorID"] = df["authorID"].apply(
+            lambda x: f"https://openalex.org/{x}"
+        )
+        st.dataframe(
+            df,
+            column_config={
+                "authorID": st.column_config.LinkColumn(
+                    "authorID",
+                    display_text=r"https://openalex\.org/(.*)"
+                )
+            }
+        )
         st.caption(f"**Shape:** {df.shape}", )
 
         score_col = "avgPerc1"
@@ -227,8 +236,15 @@ if inputIds:
                     add_columns=True
                 )
 
-
-            st.dataframe(alloc)
+            st.dataframe(
+                alloc,
+                column_config={
+                    "authorID": st.column_config.LinkColumn(
+                        "authorID",
+                        display_text=r"https://openalex\.org/(.*)"
+                    )
+                }
+            )
             st.caption(f"**Shape:** {alloc.shape}")
 
 
