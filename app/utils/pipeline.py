@@ -1,19 +1,10 @@
-import itertools
 import requests
 import time
-import pandas as pd
-import matplotlib.pyplot as plt
-from pandas.plotting import scatter_matrix
-from itertools import islice
-import os
-import pickle
-
-from sklearn.linear_model import LinearRegression
+import numpy as np
 import pandas as pd
 
 
 BASE_URL = "https://api.openalex.org"
-MAILTO = "blanca.pueche@cnb.csic.es"
 
 def authors_working_at_institution_in_year(inst_id: str, year: int, email: str, per_page: int = 200):
     """
@@ -215,13 +206,8 @@ def build_author_df_and_unique_work_distributions(aids, Y: int, mailto: str,
     uniq_works1 = sorted(all_works1)
     uniq_works2 = sorted(all_works2)
 
-    #dist1 = citation_distribution_for_work_set(uniq_works1, w1[0], w1[1], mailto=mailto, sleep_s=sleep_s)
-    #dist2 = citation_distribution_for_work_set(uniq_works2, w2[0], w2[1], mailto=mailto, sleep_s=sleep_s)
-    return df#, dist1, dist2
+    return df
 
-
-
-import numpy as np
 def apply_floor_cap_proportionally(b, B, b_min=0.0, b_max=np.inf, max_iter=200, tol=1e-9):
     """
     Enforce per-researcher minimum/maximum funding while keeping sum(b)=B.
