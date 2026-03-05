@@ -1,3 +1,5 @@
+import re
+
 import requests
 import time
 import numpy as np
@@ -207,6 +209,39 @@ def build_author_df_and_unique_work_distributions(aids, Y: int, mailto: str,
     uniq_works2 = sorted(all_works2)
 
     return df
+
+
+def sanitizeIds(input_str, st, prefix, max_ids=200):
+    """
+    Clean and validate input IDs (author or institution).
+
+    - Only alphanumeric, dash, underscore, and dot allowed.
+    - IDs must be comma-separated.
+    - Strips whitespace.
+    - Limits total number of IDs to max_ids.
+    """
+    if not input_str:
+        return []
+
+    ids = [x.strip() for x in input_str.split(",") if x.strip()]
+    valid_ids = []
+
+    pattern = f"^{prefix}\\d+$"  # e.g., '^A\d+$' or '^i\d+$'
+
+    for id_ in ids:
+        if re.match(pattern, id_):
+            valid_ids.append(id_)
+        else:
+            st.warning(f"Invalid ID skipped: {id_}")
+
+    if len(valid_ids) > max_ids:
+        st.warning(f"Only the first {max_ids} IDs will be used.")
+        valid_ids = valid_ids[:max_ids]
+
+    if not valid_ids:
+        st.error(f"No valid IDs provided with prefix '{prefix}'.")
+
+    return valid_ids
 
 def apply_floor_cap_proportionally(b, B, b_min=0.0, b_max=np.inf, max_iter=200, tol=1e-9):
     """

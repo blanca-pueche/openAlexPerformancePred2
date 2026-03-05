@@ -1,6 +1,6 @@
-from email.policy import default
-
-from numpy.matlib import empty
+import os
+import pickle
+import random
 
 from utils.pipeline import *
 
@@ -53,20 +53,16 @@ h3 {font-size: 19px !important; margin-bottom: 0.2rem;}
 </style>
 """, unsafe_allow_html=True)
 
-col1, col2 = st.columns([1,4])
 st.logo("assets/bcu_logo.png", size="large")
 
-with col1:
-    st.image("assets/CNB_2025.png", width=180)
-with col2:
-    st.markdown(
-        "<h1 style='text-align:left; margin-bottom:0;'>OpenAlex Performance Predictor</h1>",
-        unsafe_allow_html=True
-    )
-    st.markdown(
-        "<p style='text-align:left; color:gray; margin-top:0;'>TODO write description</p>",
-        unsafe_allow_html=True
-    )
+st.markdown(
+    "<h1 style='text-align:left; margin-bottom:0;'>OpenAlex Performance Predictor</h1>",
+    unsafe_allow_html=True
+)
+st.markdown(
+    "<p style='text-align:left; color:gray; margin-top:0;'>TODO write description</p>",
+    unsafe_allow_html=True
+)
 
 # Input options and params
 email = st.text_input("User e-mail:", help="OpenAlex user email")
@@ -98,45 +94,61 @@ elif searchBy == options[1]:
 
 # Submit to retrieve info
 if inputIds:
+    minPapers = st.number_input("Minimum number of papers per author:", value=10, min_value=0)
     # todo delete this check when its finished
     if not dfAll:
         with st.spinner("OpenAlex search..."):
             try:
                 if searchBy == options[0]:
-                    #inst_id = ['i4210151560', 'i4210129656']
-                    inst_ids = [x.strip() for x in inputIds.split(",") if x.strip()]
+                    inst_ids = sanitizeIds(inputIds, st, prefix='i')
                     #check id validity
                     inst_ids = checkValid(inst_ids, 'i', st)
                     for inst in inst_ids:
-                        try:
+                        aids = None
+                        for attempt in range(5):
                             aids = authors_working_at_institution_in_year(inst, year, email)
-                        except Exception as e:
-                            st.error(f"Error retrieving authors for institution {inst}: {e}")
-                            st.stop()
-                        df = build_author_df_and_unique_work_distributions(aids, Y=year, mailto=email, sleep_s=0.05)
-                        df = df[(df["count1"] > 0)].reset_index(drop=True)
-                        dfAll[inst_ids] = df
+
+                            if not aids:
+                                st.warning(f"Rate limit hit while retrieving institution {inst}. Retrying...")
+                                time.sleep(1 * (2 ** attempt))
+                                continue
+                            break
+                        if not aids:
+                            st.warning(f"Skipping institution {inst} due to repeated errors.")
+                            continue
+
+                        df = build_author_df_and_unique_work_distributions(
+                            aids, Y=year, mailto=email, sleep_s=0.05
+                        )
+                        df = df[df["count1"] >= minPapers].reset_index(drop=True)
+                        dfAll[inst] = df
+
                     # todo delete this when its finished
-                    fnAll = "app/dfMultInst.p"
-                    pickle.dump(dfAll, open(fnAll, "wb"))
+                    #fnAll = "app/dfMultInst.p"
+                    #pickle.dump(dfAll, open(fnAll, "wb"))
                 elif searchBy == options[1]:
-                    #aids = ['A5050710342', 'A5051113581', 'A5010137759', 'A5039659064']
-                    aids = [x.strip() for x in inputIds.split(",") if x.strip()]
+                    aids = sanitizeIds(inputIds, st, prefix='A')
                     # check id validity
                     aids = checkValid(aids, 'A', st)
-                    inst_ids = get_inst_ids_from_authors(aids, email)
-                    for inst_id in set(inst_ids):
-                        try:
-                            aids_in_inst = authors_working_at_institution_in_year(inst_id, year, email)
-                        except Exception as e:
-                            st.error(f"Error retrieving authors for institution {inst_id}: {e}")
-                            st.stop()
-                        df = build_author_df_and_unique_work_distributions(aids_in_inst, Y=year, mailto=email, sleep_s=0.05)
-                        df = df[df["count1"] > 0].reset_index(drop=True)
-                        dfAll[inst_id] = df
+                    df = None
+                    for attempt in range(5):
+                        df = build_author_df_and_unique_work_distributions(
+                            aids, Y=year, mailto=email, sleep_s=0.05
+                        )
+                        if df is None or df.empty:
+                            st.warning("Rate limit hit while retrieving author data. Retrying...")
+                            time.sleep(1 * (2 ** attempt))
+                            continue
+                        break
+
+                    if df is None or df.empty:
+                        st.warning("Author data incomplete due to repeated errors.")
+                    else:
+                        df = df[df["count1"] >= minPapers].reset_index(drop=True)
+                        dfAll["inputAIDs"] = df
                     # todo delete this when its finished
-                    fnAll = "app/dfMultAids.p"
-                    pickle.dump(dfAll, open(fnAll, "wb"))
+                    #fnAll = "app/dfMultAids.p"
+                    #pickle.dump(dfAll, open(fnAll, "wb"))
 
             except Exception as e:
                 st.error(f"Unexpected error during OpenAlex search: {e}")
