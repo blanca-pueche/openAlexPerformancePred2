@@ -8,7 +8,7 @@ import pandas as pd
 
 BASE_URL = "https://api.openalex.org"
 
-def authors_working_at_institution_in_year(inst_id: str, year: int, email: str, per_page: int = 200):
+def authors_working_at_institution_in_year(inst_id: str, year: int, email: str, per_page: int = 10):
     """
     Returns a set of AIDs (A...) for authors who:
       (1) have last_known_institutions containing inst_id  (proxy: currently at institution)
@@ -19,6 +19,7 @@ def authors_working_at_institution_in_year(inst_id: str, year: int, email: str, 
         inst_id = "I" + inst_id[1:]
 
     aids = set()
+    msg=''
     cursor = "*"
 
     # Prefilter: authors who ever had the institution (reduces search space)
@@ -32,33 +33,42 @@ def authors_working_at_institution_in_year(inst_id: str, year: int, email: str, 
             "select": "id,last_known_institutions,affiliations",
             "mailto": email,
         }
-        r = requests.get(f"{BASE_URL}/authors", params=params, timeout=60)
-        r.raise_for_status()
-        data = r.json()
 
-        for a in data.get("results", []):
-            # (1) current/last includes institution
-            lkis = a.get("last_known_institutions") or []
-            lk_ids = {x["id"].split("/")[-1] for x in lkis if isinstance(x, dict) and "id" in x}
-            if inst_id not in lk_ids:
-                continue
+        try:
+            r = requests.get(f"{BASE_URL}/authors", params=params, timeout=60)
+            r.raise_for_status()
+            data = r.json()
 
-            # (2) affiliation history includes institution in the target year
-            ok_year = False
-            for aff in a.get("affiliations") or []:
-                inst = aff.get("institution") or {}
-                inst_aff_id = inst.get("id", "").split("/")[-1] if inst.get("id") else ""
-                years = aff.get("years") or []
-                if inst_aff_id == inst_id and year in years:
-                    ok_year = True
-                    break
+            for a in data.get("results", []):
+                lkis = a.get("last_known_institutions") or []
+                lk_ids = {x["id"].split("/")[-1] for x in lkis if isinstance(x, dict) and "id" in x}
+                if inst_id not in lk_ids:
+                    continue
 
-            if ok_year:
-                aids.add(a["id"].split("/")[-1])
+                ok_year = False
+                for aff in a.get("affiliations") or []:
+                    inst_aff_id = aff.get("institution", {}).get("id", "").split("/")[-1]
+                    years = aff.get("years") or []
+                    if inst_aff_id == inst_id and year in years:
+                        ok_year = True
+                        break
 
-        cursor = data.get("meta", {}).get("next_cursor")
+                if ok_year:
+                    aids.add(a["id"].split("/")[-1])
 
-    return aids
+            cursor = data.get("meta", {}).get("next_cursor")
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 429:
+                msg = (f"Rate limit hit for institution {inst_id}. Returning partial results ({len(aids)} authors).")
+                break
+            else:
+                msg = (f"HTTP error {e.response.status_code} for institution {inst_id}. Continuing anyway.")
+                break
+        except Exception as e:
+            msg = (f"Error retrieving authors for institution {inst_id}: {e}. Continuing anyway.")
+            break
+
+    return aids, msg
 
 def get_json_with_retry(endpoint, params, max_retries=5, timeout=60):
     delay = 1.0

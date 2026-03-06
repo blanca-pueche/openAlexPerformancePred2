@@ -106,10 +106,9 @@ if inputIds:
                     for inst in inst_ids:
                         aids = None
                         for attempt in range(5):
-                            aids = authors_working_at_institution_in_year(inst, year, email)
-
+                            aids, msg = authors_working_at_institution_in_year(inst, year, email)
                             if not aids:
-                                st.warning(f"Rate limit hit while retrieving institution {inst}. Retrying...")
+                                st.warning(f"{msg}. Retrying...")
                                 time.sleep(1 * (2 ** attempt))
                                 continue
                             break
