@@ -1,6 +1,5 @@
 import os
 import pickle
-import random
 
 from utils.pipeline import *
 
@@ -82,72 +81,62 @@ dfAll = {}
 if searchBy == options[0]:
     # Selected institutions
     inputIds = st.text_input("Institute ids:", help='If more than one, separate with commas.')
-    #todo delete this when its finished
-    fnAll = "app/dfMultInst.p"
-    if os.path.exists(fnAll):
-        dfAll = pickle.load(open(fnAll, "rb"))
 elif searchBy == options[1]:
     # Selected authors
     inputIds = st.text_input("Author ids:", help='If more than one, separate with commas.')
-    # todo delete this when its finished
-    fnAll = "app/dfMultAids.p"
-    if os.path.exists(fnAll):
-        dfAll = pickle.load(open(fnAll, "rb"))
 
 # Submit to retrieve info
 if inputIds:
     minPapers = st.number_input("Minimum number of papers per author:", value=10, min_value=0)
-    # todo delete this check when its finished
     if st.button("Perform search", type='primary'):
-        if not dfAll:
-            with st.spinner("OpenAlex search..."):
-                try:
-                    if searchBy == options[0]:
-                        inst_ids = sanitizeIds(inputIds, st, prefix='i')
-                        #check id validity
-                        inst_ids = checkValid(inst_ids, 'i', st)
-                        for inst in inst_ids:
-                            aids = None
-                            for attempt in range(5):
-                                aids, msg = authors_working_at_institution_in_year(inst, year, email)
-                                if not aids:
-                                    st.warning(f"{msg}. Retrying...")
-                                    time.sleep(1 * (2 ** attempt))
-                                    continue
-                                break
-                            if not aids:
-                                st.warning(f"Skipping institution {inst} due to repeated errors.")
-                                continue
-
-                            df = build_author_df_and_unique_work_distributions(
-                                aids, Y=year, mailto=email, sleep_s=0.05
-                            )
-                            df = df[df["count1"] >= minPapers].reset_index(drop=True)
-                            dfAll[inst] = df
-                    elif searchBy == options[1]:
-                        aids = sanitizeIds(inputIds, st, prefix='A')
-                        # check id validity
-                        aids = checkValid(aids, 'A', st)
-                        df = None
+        with st.spinner("OpenAlex search..."):
+            try:
+                if searchBy == options[0]:
+                    inst_ids = sanitizeIds(inputIds, st, prefix='i')
+                    #check id validity
+                    inst_ids = checkValid(inst_ids, 'i', st)
+                    for inst in inst_ids:
+                        aids = None
                         for attempt in range(5):
-                            df = build_author_df_and_unique_work_distributions(
-                                aids, Y=year, mailto=email, sleep_s=0.05
-                            )
-                            if df is None or df.empty:
-                                st.warning("Rate limit hit while retrieving author data. Retrying...")
+                            aids, msg = authors_working_at_institution_in_year(inst, year, email)
+                            if not aids:
+                                st.warning(f"{msg}. Retrying...")
                                 time.sleep(1 * (2 ** attempt))
                                 continue
                             break
+                        if not aids:
+                            st.warning(f"Skipping institution {inst} due to repeated errors.")
+                            continue
 
+                        df = build_author_df_and_unique_work_distributions(
+                            aids, Y=year, mailto=email, sleep_s=0.05
+                        )
+                        df = df[df["count1"] >= minPapers].reset_index(drop=True)
+                        dfAll[inst] = df
+                elif searchBy == options[1]:
+                    aids = sanitizeIds(inputIds, st, prefix='A')
+                    # check id validity
+                    aids = checkValid(aids, 'A', st)
+                    df = None
+                    for attempt in range(5):
+                        df = build_author_df_and_unique_work_distributions(
+                            aids, Y=year, mailto=email, sleep_s=0.05
+                        )
                         if df is None or df.empty:
-                            st.warning("Author data incomplete due to repeated errors.")
-                        else:
-                            df = df[df["count1"] >= minPapers].reset_index(drop=True)
-                            dfAll["inputAIDs"] = df
-                    st.session_state.dfAll = dfAll
-                except Exception as e:
-                    st.error(f"Unexpected error during OpenAlex search: {e}")
-                    st.stop()
+                            st.warning("Rate limit hit while retrieving author data. Retrying...")
+                            time.sleep(1 * (2 ** attempt))
+                            continue
+                        break
+
+                    if df is None or df.empty:
+                        st.warning("Author data incomplete due to repeated errors.")
+                    else:
+                        df = df[df["count1"] >= minPapers].reset_index(drop=True)
+                        dfAll["inputAIDs"] = df
+                st.session_state.dfAll = dfAll
+            except Exception as e:
+                st.error(f"Unexpected error during OpenAlex search: {e}")
+                st.stop()
 
 dfAll = st.session_state.dfAll
 if dfAll:

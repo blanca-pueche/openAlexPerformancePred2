@@ -436,35 +436,6 @@ def allocate_budget(df: pd.DataFrame, B: float, score_col: str,
     return out
 
 
-def utility_from_params(df, B, score_col, alpha, lambda_uniform, gamma,
-                        target_col="avgPerc2", b_min=0.0, b_max=np.inf, id_col="authorID"):
-    """
-    Compute utility U = b · y where b is the allocated budget vector (b_total)
-    and y is the realized/target outcome (avgPerc2 by default).
-    """
-    alloc = allocate_budget(
-        df=df,
-        B=B,
-        score_col=score_col,
-        alpha=alpha,
-        lambda_uniform=lambda_uniform,
-        gamma=gamma,
-        b_min=b_min,
-        b_max=b_max,
-        id_col=id_col,
-        add_columns=True
-    )
-
-    # Align and compute dot product
-    b = alloc["b_total"].to_numpy(dtype=float)
-    y = alloc[target_col].to_numpy(dtype=float)
-
-    mask = np.isfinite(b) & np.isfinite(y)
-    if mask.sum() == 0:
-        return np.nan
-
-    return float(np.dot(b[mask], y[mask]))
-
 def checkValid(ids, letter, st):
     letter = letter.lower()
     cleaned_ids = [x.strip() for x in ids]
